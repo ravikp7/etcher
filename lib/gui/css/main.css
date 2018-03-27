@@ -6483,6 +6483,12 @@ svg-icon {
 .modal-warning-modal .modal-title .glyphicon, .modal-warning-modal .modal-title .tick {
   color: #d9534f; }
 
+.modal-file-selector-modal {
+  min-width: 95vw; }
+  .modal-file-selector-modal > .modal-content {
+    min-height: 90vh;
+    max-height: 90vh; }
+
 /*
  * Copyright 2016 resin.io
  *
