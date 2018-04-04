@@ -20,6 +20,25 @@ let rendition
  */
 const RECENT_FILES_KEY = 'file-selector-recent-files'
 
+const getFileMetadata = (dirname, basename) => {
+  const fullpath = path.join(dirname, basename)
+  const extensions = _.tail(basename.slice(-12).split(/\./g))
+
+  // TODO(Shou): this is not true for Windows, figure out Windows hidden files
+  const isHidden = basename.startsWith('.')
+  return fs.lstatAsync(fullpath).then((stats) => {
+    return {
+      basename,
+      dirname,
+      fullpath,
+      extensions,
+      isDirectory: stats.isDirectory(),
+      isHidden,
+      size: stats.size
+    }
+  })
+}
+
 /**
  * @summary Get directory contents of a path
  * @function
@@ -45,20 +64,7 @@ const RECENT_FILES_KEY = 'file-selector-recent-files'
 const getDirectoryContents = (dirname) => {
   return fs.readdirAsync(dirname).then((contents) => {
     return Bluebird.map(contents, (basename) => {
-      const fullpath = path.join(dirname, basename)
-      const extensions = _.tail(basename.slice(-12).split(/\./g))
-      const isHidden = basename.startsWith('.')
-      return fs.lstatAsync(fullpath).then((stats) => {
-        return {
-          basename,
-          dirname,
-          fullpath,
-          extensions,
-          isDirectory: stats.isDirectory(),
-          isHidden,
-          size: stats.size
-        }
-      })
+      return getFileMetadata(dirname, basename)
     })
   })
 }
@@ -221,22 +227,26 @@ const DisplayMode = styled.div`
 
 const SearchWrap = styled.div`
   position: relative;
+  overflow: hidden;
 `
 
 const SearchBar = styled.input`
-  border: 2px solid gray;
+  border: 1.5px solid gray;
   border-radius: 3px;
+  padding: 2px;
+  width: 100%;
 
-  &:focus + ${SearchIcon},
-  &:active + ${SearchIcon} {
-    display: none;
+  &:focus + .glyphicon,
+  &:active + .glyphicon {
+    left: -12px;
   }
 `
 
 const SearchIcon = styled.span`
   position: absolute;
-  left: 0;
-  top: 0;
+  left: 10px;
+  top: 6px;
+  transition: left ease-in-out 0.3s;
 `
 
 const FileList = styled.div`
@@ -247,6 +257,55 @@ const FileList = styled.div`
   overflow-y: auto;
   margin: 8px;
 `
+
+class ParentDirs extends React.PureComponent {
+  constructor (props) {
+    super(props)
+
+    this.onChange = this.onChange.bind(this)
+  }
+
+  render () {
+    console.log('ParentDirs: render')
+    // There is no path to display
+    if (!this.props.file) {
+      return null
+    }
+
+    const pathDirs = this.getPathDirs()
+    console.log(pathDirs)
+
+    return (
+      <select onChange={ this.onChange }>
+        {
+          _.map(pathDirs, (dir, index) => {
+            return <option value={ dir } selected={ pathDirs.length === index + 1 }>{ dir }</option>
+          })
+        }
+      </select>
+    )
+  }
+
+  onChange ({ target }) {
+    console.log('ParentDirs: onChange')
+    const { selectedIndex } = target
+    const fullpath = path.join(...this.getPathDirs().slice(0, selectedIndex + 1))
+
+    this.props.selectFile({
+      fullpath,
+      dirname: path.dirname(fullpath),
+      basename: path.basename(fullpath),
+      isDirectory: true,
+      extensions: [],
+      isHidden: null,
+      size: null
+    })
+  }
+
+  getPathDirs () {
+    return [ '/' ].concat(_.tail(this.props.file.dirname.split(path.sep)))
+  }
+}
 
 class FileSelector extends React.PureComponent {
   constructor (props) {
@@ -271,7 +330,8 @@ class FileSelector extends React.PureComponent {
 
   render () {
     console.log('render')
-    console.log(this.state)
+
+    const currentDir = _.head(this.state.files)
 
     return (
       <rendition.Provider>
@@ -288,7 +348,7 @@ class FileSelector extends React.PureComponent {
           <Right>
             <MenuWrap>
               <DisplayMode />
-              <div>{ path.basename(this.state.path) }</div>
+              <ParentDirs file={ currentDir } selectFile={ this.selectFile } />
               <SearchWrap>
                 <SearchBar
                   onChange={ this.findFile }
