@@ -137,7 +137,7 @@ const FileWrap = styled.div`
   cursor: pointer;
 `
 
-const Icon = styled.div`
+const Icon = styled.i`
   width: 64px;
   height: 64px;
   margin: 4px;
@@ -171,15 +171,15 @@ class FileLink extends React.PureComponent {
 
   render () {
     const icon = this.props.isDirectory
-      ? 'glyphicon-glyphicon-folder-open'
-      : 'glyphicon-glyphicon-file'
+      ? 'fa fa-folder'
+      : 'fa fa-file'
 
     return (
       <FileWrap
         onClick={ this.props.onClick }
         onDoubleClick={ this.props.onDoubleClick }
         highlight={ this.props.highlight }>
-        <Icon className={ `glyphicon ${icon}` } />
+        <Icon className={ icon } />
         <rendition.Button
           plaintext={ true }
           tooltip={ this.props.basename }>
@@ -249,15 +249,6 @@ const SearchIcon = styled.span`
   transition: left ease-in-out 0.3s;
 `
 
-const FileList = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  height: 240px;
-  overflow-x: hidden;
-  overflow-y: auto;
-  margin: 8px;
-`
-
 class ParentDirs extends React.PureComponent {
   constructor (props) {
     super(props)
@@ -276,13 +267,14 @@ class ParentDirs extends React.PureComponent {
     console.log(pathDirs)
 
     return (
-      <select onChange={ this.onChange }>
+      <rendition.Select
+        onChange={ this.onChange }>
         {
           _.map(pathDirs, (dir, index) => {
             return <option value={ dir } selected={ pathDirs.length === index + 1 }>{ dir }</option>
           })
         }
-      </select>
+      </rendition.Select>
     )
   }
 
@@ -307,6 +299,125 @@ class ParentDirs extends React.PureComponent {
   }
 }
 
+const FileListWrap = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  height: 230px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  margin: 8px;
+`
+
+class FileList extends React.PureComponent {
+  constructor (props) {
+    super(props)
+
+    this.state = {
+      rules: [
+        {
+          name: 'isHidden',
+          operator: 'is false',
+          type: 'Boolean',
+          value: ''
+        }
+      ],
+      views: [
+        {
+          key: 'global',
+          scopeLabel: 'everyone',
+          title: 'Global',
+          data: []
+        }
+      ],
+      schema: {
+        basename: {
+          type: 'Short Text'
+        },
+        isHidden: {
+          type: 'Boolean'
+        },
+        isDirectory: {
+          type: 'Boolean'
+        }
+      },
+      sieve: rendition.SchemaSieve()
+    }
+  }
+
+  render () {
+    console.log(this.state)
+    const items = this.state.sieve.filter(this.props.files, this.state.rules)
+
+    return (
+      <div>
+        <rendition.Filters
+          rules={ this.state.rules }
+          views={ this.state.views }
+          schema={ this.state.schema }
+          setViews={ views => this.setViews(views) }
+          setRules={ rules => this.setRules(rules) }
+        />
+
+        <FileListWrap>
+          {
+            items.map((item, index) => {
+              return (
+                <FileLink { ...item }
+                  /* Select file */
+                  onDoubleClick={ _.partial(this.props.selectFile, item) }
+                />
+              )
+            })
+          }
+        </FileListWrap>
+      </div>
+    )
+  }
+
+  setViews (views) {
+    this.setState({ views })
+  }
+
+  setRules (rules) {
+    this.setState({ rules })
+  }
+}
+
+
+class Path extends React.PureComponent {
+  constructor (props) {
+    super(props)
+
+    this.onClick = this.onClick.bind(this)
+  }
+
+  render () {
+    console.log('Path: render')
+    console.log(this.props.path)
+    const parsedPath = path.parse(this.props.path)
+    console.log(path)
+    const pathDirs = parsedPath.split(path.sep)
+
+    return (
+      <div> {
+        pathDirs.map((directory, index) => {
+          return (
+            <rendition.Button onClick={ this.onClick(index) }>{ directory }</rendition.Button>
+          )
+        })
+      } </div>
+    )
+  }
+
+  onClick (index) {
+    return () => {
+      const pathDirs = path.parse(this.props.path).split(path.sep)
+      const fullpath = pathDirs.slice(0, index + 1)
+      this.props.setPath(fullpath)
+    }
+  }
+}
+
 class FileSelector extends React.PureComponent {
   constructor (props) {
     super(props)
@@ -314,17 +425,12 @@ class FileSelector extends React.PureComponent {
     rendition = require('rendition')
 
     this.state = {
-      highlighted: null,
       path: props.path || os.homedir(),
-      files: [],
-      showHidden: false,
-      scrollElem: null
+      files: []
     }
 
-    this.findFile = this.findFile.bind(this)
-    this.keypressToSearch = this.keypressToSearch.bind(this)
+    this.keybindings = this.keybindings.bind(this)
     this.closeModal = this.closeModal.bind(this)
-    this.highlightFile = this.highlightFile.bind(this)
     this.selectFile = this.selectFile.bind(this)
   }
 
@@ -335,58 +441,20 @@ class FileSelector extends React.PureComponent {
 
     return (
       <rendition.Provider>
-        <Header>
-          <Tabs>
-            <Tab>
-              Select image file
-            </Tab>
-          </Tabs>
-        </Header>
         <Main>
           <Left>
           </Left>
           <Right>
             <MenuWrap>
-              <DisplayMode />
-              <ParentDirs file={ currentDir } selectFile={ this.selectFile } />
-              <SearchWrap>
-                <SearchBar
-                  onChange={ this.findFile }
-                />
-                <SearchIcon className="glyphicon glyphicon-search" />
-              </SearchWrap>
             </MenuWrap>
-            <FileList>
-              {
-                this.state.files.map((file) => {
-                  if (!this.state.showHidden && file.isHidden) {
-                    return null
-                  }
-
-                  const refProp = {}
-                  if (this.state.highlighted === file.fullpath) {
-                    refProp.ref = (scrollElem) => {
-                      this.setState({ scrollElem })
-                    }
-                  }
-
-                  return (
-                    <FileLink { ...file } { ...refProp }
-                      highlight={ this.state.highlighted === file.fullpath }
-                      onClick={ _.partial(this.highlightFile, file) }
-                      onDoubleClick={ _.partial(this.selectFile, file) }
-                    />
-                  )
-                })
-              }
-            </FileList>
+            <FileList files={ this.state.files } selectFile={ this.selectFile } />
           </Right>
         </Main>
         <Footer>
           <rendition.Button onClick={ this.closeModal }>Cancel</rendition.Button>
           <rendition.Button
-            onClick={ _.partial(this.selectFile, this.state.highlighted) }
-            disabled={ !this.state.highlighted }>
+            onClick={ _.partial(this.selectFile, this.state.highlightedFile) }
+            disabled={ !this.state.highlightedFile }>
             Select file
           </rendition.Button>
         </Footer>
@@ -395,11 +463,11 @@ class FileSelector extends React.PureComponent {
   }
 
   componentWillMount () {
-    window.addEventListener('keypress', this.focusSearch)
+    window.addEventListener('keypress', this.keybindings)
   }
 
   componentWillUmount () {
-    window.removeEventListener('keypress', this.focusSearch)
+    window.removeEventListener('keypress', this.keybindings)
   }
 
   componentDidMount () {
@@ -412,49 +480,14 @@ class FileSelector extends React.PureComponent {
 
   componentDidUpdate () {
     console.log('componentDidUpdate')
-
-    if (this.state.highlighted === window.fullpath) {
-    }
-
-    console.log(this.state.scrollElem)
-    if (this.state.scrollElem) {
-      this.state.scrollElem.current.scrollIntoView(true)
-    }
   }
 
-  findFile (event) {
-    console.log('findFile')
-
-    const searchValue = event.target.value.toLowerCase()
-    if (searchValue !== '') {
-      const fileMatch = _.find(this.state.files, (file) => {
-        const doesMatch = file.basename.toLowerCase().includes(searchValue)
-        return (file.isHidden ? this.props.showHidden : true) && doesMatch
-      })
-
-      if (fileMatch) {
-        this.setState({ highlighted: fileMatch.fullpath })
-      }
-    }
-  }
-
-  keypressToSearch (event) {
+  keybindings (event) {
     console.log(event.key)
-
-    if (event.keyCode > 31) {
-      // focus
-    }
   }
 
   closeModal () {
     this.props.close()
-  }
-
-  highlightFile (file, event) {
-    console.log('highlightFile')
-    console.log(file)
-
-    this.setState({ highlighted: file.fullpath })
   }
 
   selectFile (file, event) {
@@ -467,7 +500,7 @@ class FileSelector extends React.PureComponent {
       analytics.logDebug(`File selector: browse ${file.fullpath}`)
 
       getDirectoryContents(file.fullpath).then((files) => {
-        this.setState({ path: file.fullpath, highlighted: null, files })
+        this.setState({ path: file.fullpath, files })
       })
     } else {
       analytics.logDebug(`File selector: select file ${file.fullpath}`)
