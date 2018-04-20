@@ -203,3 +203,9 @@ aws s3api delete-object --bucket <bucket name> --key <file name>
 ```
 
 The Bintray dashboard provides an easy way to delete a version's files.
+
+
+### Submitting binaries to Symantec
+
+- [Report a Suspected Erroneous Detection](https://submit.symantec.com/false_positive/standard/)
+- Select Submission Type: "Provide a direct download URL"
